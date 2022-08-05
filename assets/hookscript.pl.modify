@@ -1,0 +1,27 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use Sys::Hostname;
+
+print "GUEST HOOK: " . join(' ', @ARGV). "\n";
+
+my $vmid = shift;
+my $phase = shift;
+my $anhost = hostname;
+
+if ($phase eq 'pre-start') {
+    print "$vmid is starting.\n";
+    system("/usr/bin/curl -X POST -k -H \"Content-Type: application/json\" 'https://signal.mon.admin.lan/v2/send' -d '{\"message\": \"$anhost: LXC $vmid start\", \"number\": \"+33611221911\", \"recipients\": [ \"+33611221911\" ]}'")
+} elsif ($phase eq 'post-start') {
+    print "$vmid started, executing network script.\n";
+} elsif ($phase eq 'pre-stop') {
+    print "$vmid will be stopped.\n";
+} elsif ($phase eq 'post-stop') {
+    print "$vmid stopped. Doing cleanup.\n";
+    system("/usr/bin/curl -X POST -k -H \"Content-Type: application/json\" 'https://signal.mon.admin.lan/v2/send' -d '{\"message\": \"$anhost: LXC $vmid stop\", \"number\": \"+33611221911\", \"recipients\": [ \"+33611221911\" ]}'")
+} else {
+    die "got unknown phase '$phase'\n";
+}
+
+exit(0);

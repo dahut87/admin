@@ -1,0 +1,133 @@
+#!/bin/sh
+#
+# zfs-mount     This script will mount/umount the zfs filesystems.
+#
+# chkconfig:    2345 06 99
+# description:  This script will load/unload the key from zfs filesystems during
+#               system boot/shutdown.
+# probe: true
+#
+### BEGIN INIT INFO
+# Provides:          zfs-keys
+# Required-Start:    $local_fs zfs-import
+# Required-Stop:     $local_fs zfs-import
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# X-Stop-After:      zfs-zed
+# Short-Description: Load keys for ZFS filesystems and volumes with NFC reader
+# Description: Load all keys for ZFS filesystems with NFC reader
+### END INIT INFO
+#
+# Released under the 2-clause BSD license.
+#
+# The original script that acted as a template for this script came from
+# the Debian GNU/Linux kFreeBSD ZFS packages (which did not include a
+# licensing stansa) in the commit dated Mar 24, 2011:
+#   https://github.com/zfsonlinux/pkg-zfs/commit/80a3ae582b59c0250d7912ba794dca9e669e605a
+
+# Source the common init script
+. /etc/zfs/zfs-functions
+
+# ----------------------------------------------------
+# Load keys
+do_load()
+{
+	if [ ! -d /mnt/usb ]; then
+		echo "Create /mnt/usb"
+		mkdir -p /mnt/usb
+	fi
+	tmpfs=$(mount|grep tmpfs|grep "/mnt/usb")
+	if [ -z "$tmpfs" ]; then
+		echo "Mount tmpfs on /mnt/usb"
+		mount -t tmpfs tmpfs /mnt/usb
+	fi
+	echo "Import all volumes"
+	zpool import -aN 
+	#zpool import -aN -o cachefile=none
+	echo "Load all zfs keys"
+	values=$(mifare-classic-read-ndef -y -o -|/usr/local/bin/ndeftool load - print)
+	if [ -z "${values}" ]; then
+       		echo "Unable to read card"
+       		exit
+	fi
+	echo "* Recreating volume "
+	keys=$(echo "${values}"|sed "s/.*ID '\(key[ 1-9]*\)'.*/\1/g")
+	echo "$keys"|while read -r key;
+	do
+        	value=$(echo "$values"|grep "ID '$key'"|sed "s/NDEF Text Record ID '[^']*' Text '\(.*\)' Language 'en' Encoding 'UTF-8'/\1/g")
+        	echo "$value" > "/mnt/usb/$key"
+	done
+	ls /mnt/usb/key*
+	echo "Loading keys"
+	zfs load-key -a
+	echo "Mount volumes"
+	zfs mount -a
+	echo "Verify key"
+	echo "View volumes"
+	tree /srv -L 2
+	echo "Unmount tmpfs"
+	umount -q /mnt/usb
+	return 0
+}
+
+# Unload all keys
+do_unload()
+{
+	echo "Unmounting volumes"
+	zfs list -H  -o name -t filesystem|grep -v "rpool"|while read fs; do
+		zfs umount $fs
+	done	
+	echo "Unloading keys"
+	zfs unload-key -a
+	echo "Exporting volumes"
+	zpool export -a
+	echo "Unmount tmpfs"
+	umount -q /mnt/usb
+	return 0
+}
+
+do_start()
+{
+	check_boolean "$ZFS_MOUNT" || exit 0
+
+	check_module_loaded "zfs" || exit 0
+
+	do_load
+}
+
+do_stop()
+{
+	check_boolean "$ZFS_UNMOUNT" || exit 0
+
+	check_module_loaded "zfs" || exit 0
+
+	do_unload
+}
+
+# ----------------------------------------------------
+
+if [ ! -e /sbin/openrc-run ]
+then
+	case "$1" in
+		start)
+			do_start
+			;;
+		stop)
+			do_stop
+			;;
+		force-reload|condrestart|reload|restart|status)
+			# no-op
+			;;
+		*)
+			[ -n "$1" ] && echo "Error: Unknown command $1."
+			echo "Usage: $0 {start|stop}"
+			exit 3
+			;;
+	esac
+
+	exit $?
+else
+	start() { do_start; }
+	stop() { do_stop; }
+fi
+exit

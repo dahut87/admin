@@ -1,0 +1,55 @@
+## Templates for ctcreate command
+debian="debian-11-default_20220505_adm64.tar.xz"
+ubuntu="ubuntu-22.04-default-20220506_adm64.tar.xz"
+alpine="alpine-3.15-default_20220508_amd64.tar.xz"
+
+## ZFS volume for storing data
+serverpool="datapool/serveur"
+
+## Syncoid duplicates for rapport command
+dup1="volume/serveur_dup"
+dup2="volume/donnees_dup"
+
+## ZFS datapool to monitor
+datapool="datapool/donnees"
+
+## DC/AC inverter configuration for rapport command
+load=$(upsc eaton@localhost battery.charge > /dev/stdout 2> /dev/null)
+status=$(upsc eaton@localhost ups.status > /dev/stdout 2> /dev/null)
+
+## Mail configuration for rapportmail command
+src="horde.nicolas@orange.fr"
+dst="nico@ia86.cc"
+
+## User Mapping :
+## uid:gid  -> uid:gid from host
+## 1002:1002 -> 1002:1002
+## 1027:1027 -> 1027:1027
+## 1028:1028 -> 1028:1028
+## 1029:1029 -> 1029:1029
+##      1030 ->     :1030
+## All other uid:gid
+## XXXX:XXXX -> 10XXXX:10XXXX
+## Ex root user
+## 0000:0000 -> 100000:100000
+
+## Customizing Alpine linux install with uid/gid
+customize="adduser niko -D -s /bin/false -u 1029 niko \n\
+adduser audrey -H -D -s /bin/false -u 1028 audrey \n\
+adduser time -H -D -s /bin/false -u 1027 time \n\
+adduser media -H -D -s /bin/false -u 1002 media \n\
+groupmod niko -g 1029 \n\
+groupmod media -g 1002 \n\
+groupmod audrey -g 1028 \n\
+groupmod time -g 1027 \n\
+addgroup -g 1030 nous \n"
+
+## Volumes for rclone
+rclone_vols=/srv/donnees/Commun,/srv/donnees/Niko,/srv/donnees/Audrey,/srv/Serveur
+
+## Path on cloud
+rclone_path=nas
+
+##Configuration de signal
+signal_host="signal.mon.admin.lan"
+signal_num="+33611221911"

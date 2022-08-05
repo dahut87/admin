@@ -1,0 +1,13 @@
+[Unit]
+Description=Unload keys used by ZFS filesystems
+Documentation=man:zfs(8)
+DefaultDependencies=no
+Before=halt.target shutdown.target reboot.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/etc/init.d/zfs-keys stop
+
+[Install]
+WantedBy=halt.target shutdown.target reboot.target

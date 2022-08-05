@@ -1,0 +1,17 @@
+[Unit]
+Description=Load keys used by ZFS filesystems
+Documentation=man:zfs(8)
+DefaultDependencies=no
+After=systemd-udev-settle.service
+After=zfs-import.target
+After=systemd-remount-fs.service
+Before=zfs-mount.service
+ConditionPathIsDirectory=/sys/module/zfs
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/etc/init.d/zfs-keys start
+
+[Install]
+WantedBy=zfs.target
