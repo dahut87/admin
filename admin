@@ -8,7 +8,7 @@ ALLARGS="$@"
 upgrade()
 {
 	show "Upgrade admin command" 1
-	wget "https://raw.githubusercontent.com/dahut87/admin/master/admin" -O /tmp/admin &> /dev/null
+	wget --no-cache "https://raw.githubusercontent.com/dahut87/admin/master/admin" -O /tmp/admin &> /dev/null
 	if [ "$?" == 0 ]; then
 		show "Download ok"
 	else
@@ -24,10 +24,10 @@ upgrade()
 		echo "Version are differents"
 		show "Copying new admin command" 1
 		cp /tmp/admin /bin/admin
+		exit
 	else
-		show "Version are identicals" 1
+		show "You are using latest version" 1
 	fi	
-	show "You are using latest version" 1
 }
 
 volconfig()
