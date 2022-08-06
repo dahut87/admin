@@ -25,9 +25,9 @@ upgrade()
 		show "Copying new admin command" 1
 		cp /tmp/admin /bin/admin
 	else
-		show "Version are identicals"	
+		show "Version are identicals" 1
 	fi	
-	show "You are using latest version"
+	show "You are using latest version" 1
 }
 
 volconfig()
