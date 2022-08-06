@@ -5,6 +5,28 @@ source "$DIRECTORY/assets/config"
 ALLSTR=""
 ALLARGS="$@"
 
+upgrade()
+{
+	show "Upgrade admin command" 1
+	wget "https://raw.githubusercontent.com/dahut87/admin/master/admin" -O /tmp/admin &> /dev/null
+	if [ "$?" == 0 ]; then
+		show "Download ok"
+	else
+		show "Error on download" ERR
+		exit
+	fi
+	show "Compare version" 1
+	current=$(sha1sum /bin/admin|cut -d" " -f1)
+	next=$(sha1sum /tmp/admin|cut -d" " -f1)
+	show "Current: $current"
+	show "Last   : $next" 
+	if [ "$current" != "$next" ]; then
+		echo "Version are differents"
+		show "Copying new admin command"
+		cp /tmp/admin /bin/admin
+	fi	
+}
+
 volconfig()
 {
 	if [ -z "$1" ]; then
@@ -595,6 +617,7 @@ help()
 	show ""
 	show "-< Admin PVE"
 	show "install		- install admin command NOARG"
+	show "upgrade		- upgrade admin command NOARG"
 	show "rapport		- create HTML report NOARG"
 	show "close		- close all temp directory NOARG"
 	show "rclone		- sync, check data to cloud 1ARG"
@@ -1389,6 +1412,9 @@ nfcunmount)
 	;;
 install)
 	install
+	;;
+upgrade)
+	upgrade
 	;;
 *)
 	help
