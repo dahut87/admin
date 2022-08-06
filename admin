@@ -1,8 +1,9 @@
 #!/bin/bash
-#DIRECTORY=$(cd `dirname $0` && pwd)
+CURRENT=$(cd `dirname $0` && pwd)
 DIRECTORY="/root/"
 source "$DIRECTORY/assets/config"
 ALLSTR=""
+
 win()
 {
 	if [ -f "/usr/bin/aplay" ]; then
@@ -58,6 +59,10 @@ install()
 	show "Install generic hookscript" 1
 	mkdir -p /var/lib/vz/snippets
 	cp $DIRECTORY/assets/hookscript.pl /var/lib/vz/snippets/
+	show "copying admin to /bin" 1
+	mv "$CURRENT/admin" /bin/admin
+	show "copying assets to /root" 1
+	mv "$CURRENT/assets" /root/assets
 	show "Installation OK, relaunch"
 	exit
 }
@@ -448,6 +453,7 @@ help()
 	show "diskhealth	- view disk health NOARG"
 	show ""
 	show "-< Admin PVE"
+	show "install		- install admin command NOARG"
 	show "rapport		- create HTML report NOARG"
 	show "close		- close all temp directory NOARG"
 	show "rclone		- sync, check data to cloud 1ARG"
@@ -457,7 +463,7 @@ help()
 	show ""
 	show "-< NFC"
 	show "nfcinstall	- install nfc service for ZFS cyphering NOARG"
-	show "nfcreadraw		- read nfc tag with low level NOARG"
+	show "nfcreadraw	- read nfc tag with low level NOARG"
 	show "nfcread		- read nfc tag NOARG"
 	show "nfcwrite	- write keys comma separated on a tag 1ARG"
 	show "nfcobfuscate	- obsfuscate tag NOARG"
@@ -468,7 +474,7 @@ help()
 	show "nfcmount	- mount nfc card as a volume NOARG"
 	show "nfcunmount	- unmount nfc card NOARG"
 	show ""
-	show "*tomail & tosignal, sens to mail or to signal account the content of the command"
+	show "*tomail & tosignal, send to mail or to signal messenger the result of the command"
 	exit 2
 }
 
@@ -736,6 +742,9 @@ ctcreate()
 			exit
 		fi
 	fi
+	passwd=$(cat /root/.passwd)
+	allpass="echo $passwd"
+	pass=$(eval "$allpass")
 	zfscreate $volume
 	pct create $lastid /var/lib/vz/template/cache/$files \
     	--arch amd64 \
@@ -745,7 +754,7 @@ ctcreate()
     	--memory $mem \
     	--swap 0 \
     	--storage local-zfs \
-    	--password "Isthegood87" \
+    	--password "$pass" \
     	--nameserver 192.168.200.1 \
     	--onboot $boot \
     	--startup $bootorder \
@@ -1261,6 +1270,9 @@ nfcmount)
 	;;
 nfcunmount)
 	nfcunmount
+	;;
+install)
+	install
 	;;
 *)
 	help
