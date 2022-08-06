@@ -4,6 +4,116 @@ DIRECTORY="/root/"
 source "$DIRECTORY/assets/config"
 ALLSTR=""
 
+getnets()
+{
+	nets=""
+	while read net; do
+		min="${net,,}"
+		nets="$nets${min:0:1}"
+	done < <(echo "$net_ALL"|tr "," "\n")
+	echo "$nets"
+}
+
+getnetsopt()
+{
+	nets=""
+	while read net; do
+		min="${net,,}"
+		nets="$nets[${min:0:1}]"
+	done < <(echo "$net_ALL"|tr "," "\n")
+	echo "$nets"
+}
+
+findnet()
+{
+	while read net; do
+		if [[ "${net,,}" == "$1"* ]]; then	
+			echo "${net}"
+			return
+		fi
+	done < <(echo "$net_ALL"|tr "," "\n")
+	
+}
+
+shownetconfig()
+{
+	string="SHORT NAME|NAME|NETWORK|DOMAIN|VLAN|GATEWAY|BRIDGE\n"
+	while read net; do
+		realnet=$(findnet $net)
+		allrange="echo \$net${net^}_prefix"
+		range=$(eval "$allrange")
+		allcidr="echo \$net${net^}_cidr"
+		cidr=$(eval "$allcidr")
+		alltag="echo \$net${net^}_tag"
+		tag=$(eval "$alltag")
+		allgw="echo \$net${net^}_gw"
+		gw=$(eval "$allgw")
+		allbr="echo \$net${net^}_br"
+		br=$(eval "$allbr")
+		allsearch="echo \$net${net^}_search"
+		search=$(eval "$allsearch")
+		string="$string\n$net|$realnet|$range/$cidr|$search|$tag|$gw|$br"
+	done < <(getnets|fold -w1)
+	echo -en "$string"|column -s "|" -t
+}
+
+getsearchdomain()
+{
+	mini=${net_ALL,,} 
+	net=${mini:0:1} 
+	allsearch="echo \$net${net^}_search"
+	search=$(eval "$allsearch")
+	echo "$search"
+}
+
+netconfig()
+{	
+	allnet=""
+	id=0
+	if [ "$1" == "" ]; then
+		mini=${net_ALL,,} 
+		nets=${mini:0:1} 
+	else
+		nets=${1,,} 
+	fi
+	while read net; do
+		realnet=$(findnet $net)
+		allrange="echo \$net${net^}_prefix"
+		range=$(eval "$allrange")
+		allcidr="echo \$net${net^}_cidr"
+		cidr=$(eval "$allcidr")
+		alltag="echo \$net${net^}_tag"
+		tag=$(eval "$alltag")
+		allgw="echo \$net${net^}_gw"
+		gw=$(eval "$allgw")
+		allbr="echo \$net${net^}_br"
+		br=$(eval "$allbr")
+		allsearch="echo \$net${net^}_search"
+		search=$(eval "$allsearch")
+		if [[ "$nets" == *"$net"* ]]; then
+			ip=$(findfreeip $range $2)
+			if [ "$tag" != "no" ]; then
+				fulltag=",tag=$tag"
+			else
+				fulltag=""	
+			fi
+			if [ "$gw" != "no" ]; then
+				fullgw=",gw=$range.$gw"
+			else
+				fullgw=""	
+			fi
+			if [ "$tag" != "no" ]; then
+				num="$tag"
+			else
+				num="0"	
+			fi
+ 			allnet="$allnet--net$id name=eth$num,bridge=$br$fulltag,firewall=0,ip=$ip/$cidr$fullgw,type=veth "
+		id=$((id+1))
+		fi
+	done < <(getnets|fold -w1)
+	echo "$allnet"
+}
+
 win()
 {
 	if [ -f "/usr/bin/aplay" ]; then
@@ -383,30 +493,44 @@ EOF
 
 zfsdelete()
 {
+	show "Deleting subdataset $serverpool/$1"
         if [ ! -z "$1" ]; then
                 zfs destroy $serverpool/$1
-		rmdir /srv/serveur/$1
+		rmdir $servermount/$1
         fi
 }
 
 zfscreate()
 {
+	show "Creating subdataset $serverpool/$1 on $servermount/$1" 1
         if [ ! -z "$1" ]; then
-		zfs create $serverpool/$1 -o mountpoint=/srv/serveur/$1
-		chown 100000:100000 /srv/serveur/$1
+		zfs create $serverpool/$1 -o mountpoint=$servermount/$1
+		chown 100000:100000 $servermount/$1
 	fi
 }
 
 lastid()
 {
+	#show "Getting last ID" 1
 	last=$(lxc-ls -1|sort -nr|head -n1)
 	echo $((last+1))
 }
 
 findfreeip()
 {
+	if [ "$2" != "" ]; then
+		#show "Search ip in preferential list" 1
+		while read ip; do
+			if [[ "$ip" == "$1."* ]]; then
+				echo -en "$ip"
+				return
+			fi
+		done < <(echo "$2"|tr "," "\n")	
+
+	fi
+	#show "Search ip by dns & nmap" 1
 	for i in {1..254}; do 
-		domain=$(nslookup $1.$i 192.168.200.1|grep NXDOMAIN)
+		domain=$(nslookup $1.$i $dns|grep NXDOMAIN)
 		if [ -z "$domain" ]; then
 			show -en "$1.$i"
 			exit
@@ -421,6 +545,7 @@ findfreeip()
 
 genname()
 {
+	#show "Generate animal name" 1
 	ad=$(cat "$DIRECTORY/assets/adjectives.json")
 	an=$(cat "$DIRECTORY/assets/animals.json")
 	ad_len=$(jq length "$DIRECTORY/assets/adjectives.json")
@@ -480,26 +605,23 @@ help()
 
 help_ctcreate()
 {
-	show "Usage: admin ctcreate [ -n|--name generated ] [ -N|--net [A][D][C][S][L] ] [ -m|--mem 2048 ] [ -c|--core 1] [ -v|--vol 32 ] [ -o|--os alpine ] [ -p|--privilegied ] [ -d|--docker ] [ -b|--bootorder 1 ] [ -h ] [ -g|--git NODEFAULTVALUE ] [ -P|--params NODEFAULTVALUE ]" 1
+	show "Usage: admin ctcreate [ -n|--name animal-generated ] [ -N|--net [ $(getnetsopt) ] [ -m|--mem 2048 ] [ -c|--core 1] [ -v|--vol 32 ] [ -o|--os alpine ] [ -p|--privilegied ] [ -d|--docker ] [ -B|--boot ] [ -b|--bootorder 30 ] [ -h ] [ -g|--git NODEFAULTVALUE ] [ -P|--params NODEFAULTVALUE ] [ -M|--mapping NODEFAULTVALUE ] [ -I|--ip NODEFAULTVALUE ]" 1
 	show ""
 	show "Create a container in proxmox"
 	show ""
         show "name     : generated automaticly if not given"
-        show "net      : multiple choice"
-	show "  A->Admin  10.0.0.0/16 	VLAN5"
-	show "  D->Dmz    192.168.200.0/24	VLAN200"
-	show "  C->Client 192.168.100.0/24	VLAN100"
-	show "  S->Server 192.168.10.0/24	VLAN10"
-	show "  L->Local  192.168.1.0/24	NOVLAN"
+        show "net      : multiple choice concatening short name"
+	shownetconfig
         show "os       : unique choice"
 	show "  debian"
 	show "  alpine"
 	show "  ubuntu"
         show "mem      : in MB"
         show "vol      : in GB"
-        show "bootorder: if not specified, not started after host boot"
         show "git      : path to git url for cloning data to /srv"
-        show "params   : params to pass to /srv/install.sh file if exists"
+        show "params   : params to pass to /srv/install.sh script if exists"
+        show "mapping  : map /srv container path to host path specified, replace ZFS auto mapping"
+	show "ip       : give preferential ip when selecting a network"
 	exit 2
 }
 
@@ -510,7 +632,7 @@ help_ctdelete()
 	show "Delete a container in proxmox"
 	show ""
         show "id       : id of container"
-        show "data     : delete also serveur data"
+        show "data     : delete also server data"
 	show "yes      : force deletion without question"
 	exit 2
 }
@@ -522,7 +644,7 @@ help_rclone()
 	show "Use the rclone backend to make some cloud operations"
 	show ""
         show "sync     : perform a sync with the cloud"
-        show "view     : view interactivly serveur data"
+        show "view     : view interactivly server data"
 	show "check    : check integrity of distant data"
 	exit 2
 }
@@ -575,8 +697,8 @@ rcloneapp()
 
 ctcreate()
 {
-	SHORT=n:,N:,m:,c:,v:,o:,b:,g:,p,d,h,P:
-	LONG=name:,net:,mem:,core:,vol:,os:,bootorder:,git:,privileged,docker,help,params:
+	SHORT=n:,N:,m:,c:,v:,o:,b:,B,g:,p,d,h,P:,I:,M:
+	LONG=name:,net:,mem:,core:,vol:,os:,bootorder:,boot,git:,privileged,docker,help,params:,ip:,mapping:
 	OPTS=$(getopt -a -n ctcreate --options $SHORT --longoptions $LONG -- "$@")
 
 	VALID_ARGUMENTS=$# 
@@ -594,6 +716,8 @@ ctcreate()
 	boot="0"
 	git=""
 	params=""
+	mapping=""
+	ip=""
 
 	while :
 	do
@@ -607,6 +731,10 @@ ctcreate()
       		;;
     		-p | --privileged )
       		unprivileged="0"
+      		shift
+		;;
+    		-B | --boot )
+      		boot="1"
       		shift
       		;;
     		-b | --bootorder )
@@ -632,15 +760,23 @@ ctcreate()
       		shift 2
       		;;
     		-v | --vol )
-      		vol="${2,,}"
+      		vol="$(($2))"
       		shift 2
       		;;
     		-g | --git )
-      		git="${2,,}"
+      		git="${2}"
+      		shift 2
+      		;;
+    		-I | --ip )
+      		ip="${2,,}"
+      		shift 2
+      		;;
+    		-M | --mapping )
+      		mapping="${2}"
       		shift 2
       		;;
     		-P | --params )
-      		params=$(echo "${2,,}"|tr "," " ")
+      		params=$(echo "${2}"|tr "," " ")
       		shift 2
       		;;
     		-c | --core )
@@ -656,7 +792,8 @@ ctcreate()
       		shift 2
       		;;
     		-N | --net )
-      		net=$(echo "${2,,}"|sed 's/[^acdsl]*//g'|sed -f <(printf 's/%s//2g\n' {a..z}))
+		select=$(getnets)
+		net=$(echo "${2,,}"|sed "s/[^$select]*//g"|sed -f <(printf 's/%s//2g\n' {a..z}))
       		shift 2
       		;;
     		-h | --help)
@@ -676,9 +813,6 @@ ctcreate()
 	if [ -z "$name" ]; then
 		name=$(genname)
 	fi
-	if [ -z "$net" ]; then
-		net="s"
-	fi
 	if [ -z "$mem" ]; then
 		mem="2048"
 	fi
@@ -691,44 +825,6 @@ ctcreate()
 	if [ -z "$os" ]; then
 		os="alpine"
       		files=$alpine
-	fi
-	if [ ! -z "$bootorder" ]; then
-		boot="1"
-	fi
-	if [[ "$net" == *s* ]]; then
-		search="server.lan"
-		tag=10
-		thenet="192.168.$tag"
-		ipS=$(findfreeip $thenet)
-    		netS="--net0 name=eth10,bridge=vmbr1,tag=$tag,firewall=0,ip=$ipS/24,gw=$thenet.254,type=veth"
-	fi
-	if [[ "$net" == *l* ]]; then
-		search="local.lan"
-		tag=1
-		thenet="192.168.$tag"
-		ipL=$(findfreeip $thenet)
-    		netL="--net1 name=eth0,bridge=vmbr1,firewall=0,ip=$ipL/24,gw=$thenet.1,type=veth"
-	fi
-	if [[ "$net" == *c* ]]; then
-		search="client.lan"
-		tag=100
-		thenet="192.168.$tag"
-		ipC=$(findfreeip $thenet)
-    		netC="--net2 name=eth100,bridge=vmbr1,tag=$tag,firewall=0,ip=$ipC/24,gw=$thenet.254,type=veth"
-	fi
-	if [[ "$net" == *d* ]]; then
-		search="dmz.lan"
-		tag=200
-		thenet="192.168.$tag"
-		ipD=$(findfreeip $thenet)
-    		netD="--net3 name=eth200,bridge=vmbr1,tag=$tag,firewall=0,ip=$ipD/24,gw=$thenet.254,type=veth"
-	fi
-	if [[ "$net" == *a* ]]; then
-		search="admin.lan"
-		tag=5
-		thenet="10.0.0"
-		ipA=$(findfreeip $thenet)
-    		netA="--net4 name=eth5,bridge=vmbr0,firewall=0,ip=$ipA/16,type=veth"
 	fi
 
 	lastid=$(lastid)
@@ -745,7 +841,13 @@ ctcreate()
 	passwd=$(cat /root/.passwd)
 	allpass="echo $passwd"
 	pass=$(eval "$allpass")
-	zfscreate $volume
+	if [ "$mapping" != "" ]; then
+    		allvolume="$mapping"
+	else
+    		allvolume="$servermount/$volume"
+		zfscreate $volume
+	fi
+	search=$(getsearchdomain)
 	pct create $lastid /var/lib/vz/template/cache/$files \
     	--arch amd64 \
     	--ostype $os \
@@ -755,30 +857,32 @@ ctcreate()
     	--swap 0 \
     	--storage local-zfs \
     	--password "$pass" \
-    	--nameserver 192.168.200.1 \
+    	--nameserver $dns \
     	--onboot $boot \
-    	--startup $bootorder \
+    	--startup "order=$bootorder" \
     	--tags AUTO \
     	--hookscript local:snippets/hookscript.pl \
     	--unprivileged $unprivileged \
     	--searchdomain $search \
     	--description "Autogenerated container $name:$lastid" \
     	--features keyctl=$keyctl,fuse=$fuse,nesting=$nesting \
-    	--mp0 /srv/serveur/$volume,mp=/srv \
+    	--mp0 $allvolume,mp=/srv \
     	--rootfs local-zfs:$vol \
-    	$netA \
-    	$netD \
-    	$netC \
-    	$netS \
-    	$netL
+    	$(netconfig $net $ip)
+	if [ "$?" -gt 0 ]; then
+		show "Error when creating container" ERR
+		exit
+	fi
 	if [ "$unprivileged" == "1" ]; then
 		cat << EOF >> /etc/pve/local/lxc/$lastid.conf
 lxc.idmap: u 0 100000 1002
 lxc.idmap: g 0 100000 1002
 lxc.idmap: u 1002 1002 1
 lxc.idmap: g 1002 1002 1
-lxc.idmap: u 1003 101003 25
-lxc.idmap: g 1003 101003 25
+lxc.idmap: u 1003 101003 24
+lxc.idmap: g 1003 101003 24
+lxc.idmap: u 1027 1027 1
+lxc.idmap: g 1027 1027 1
 lxc.idmap: u 1028 1028 1
 lxc.idmap: g 1028 1028 1
 lxc.idmap: u 1029 1029 1
@@ -806,13 +910,18 @@ service docker start \n\
 docker network create proxy \n\
 rc-update add docker \n"|pct enter $lastid
 	fi
+	if [ "$mapping" != "" ]; then
+		exec_vol="/mnt"
+	else
+		exec_vol="/srv"
+	fi
 	if [ "$git" != "" ]; then
-		echo  "git clone $git /srv/"|pct enter $lastid
+		echo  "git clone $git $exec_vol/"|pct enter $lastid
 	fi
 	allparams=$(echo "$params"|tr "," " ")
-	afile=$(pct exec $lastid -- /bin/bash -c "ls /srv"|grep "install.sh")
+	afile=$(pct exec $lastid -- /bin/bash -c "ls $exec_vol"|grep "install.sh")
         if [ "$afile" != "" ]; then
-                pct exec $lastid -- /bin/bash -c "chmod 755 /srv/install.sh && /srv/install.sh $allparams"
+                pct exec $lastid -- /bin/bash -c "chmod 755 $exec_vol/install.sh && $exec_vol/install.sh $allparams"
         fi
 }
 
@@ -1158,10 +1267,10 @@ rapport()
 
 startpv()
 {
-	show "Mount ZFS volumes"
+	show "Mount ZFS volumes" 1
 	zfs mount -a
 	ls /srv/*
-	show "Run Proxmox services"
+	show "Run Proxmox services" 1
 	systemctl start pve-cluster
 	systemctl start pvedaemon
 	systemctl start pvestatd

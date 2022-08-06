@@ -3,8 +3,50 @@ debian="debian-11-default_20220505_adm64.tar.xz"
 ubuntu="ubuntu-22.04-default-20220506_adm64.tar.xz"
 alpine="alpine-3.15-default_20220508_amd64.tar.xz"
 
+## Network used by containers
+net_ALL=server,admin,dmz,client,local
+## Type LOCAL
+netL_prefix=192.168.1
+netL_cidr=24
+netL_tag=no
+netL_gw=1
+netL_br=vmbr1
+netL_search=local.lan
+## Type SERVER
+netS_prefix=192.168.10
+netS_cidr=24
+netS_tag=10
+netS_gw=254
+netS_br=vmbr1
+netS_search=server.lan
+## Type CLIENT
+netC_prefix=192.168.100
+netC_cidr=24
+netC_tag=100
+netC_gw=254
+netC_br=vmbr1
+netC_search=client.lan
+## Type DMZ
+netD_prefix=192.168.200
+netD_cidr=24
+netD_tag=200
+netD_gw=254
+netD_br=vmbr1
+netD_search=dmz.lan
+## Type ADMIN
+netA_prefix=10.0.0
+netA_cidr=16
+netA_tag=no
+netA_gw=no
+netA_br=vmbr0
+netA_search=admin.lan
+
+## DNS used by containers
+dns="192.168.200.1"
+
 ## ZFS volume for storing data
 serverpool="datapool/serveur"
+servermount="/srv/serveur"
 
 ## Syncoid duplicates for rapport command
 dup1="volume/serveur_dup"
