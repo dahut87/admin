@@ -22,9 +22,12 @@ upgrade()
 	show "Last   : $next" 
 	if [ "$current" != "$next" ]; then
 		echo "Version are differents"
-		show "Copying new admin command"
+		show "Copying new admin command" 1
 		cp /tmp/admin /bin/admin
+	else
+		show "Version are identicals"	
 	fi	
+	show "You are using latest version"
 }
 
 volconfig()
