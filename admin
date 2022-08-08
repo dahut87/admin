@@ -607,7 +607,8 @@ help()
 	show "help for COMPLEX commands: admin command -h"
 	show "-< Containers"
 	show "ctcreate	- create a container COMPLEX"
-	show "ctdelete 	- delete a container COMPLEX"
+	show "ctdelete 	- delete a container COMPLEX":y
+	show "ctreinstall	- reinstall container by relauching command 1ARG":y
 	show "ctkill		- stop a running container 1ARG"
 	show "ctkillall	- stop all containers NOARG"
 	show ""
@@ -735,6 +736,49 @@ rcloneapp()
 	;;
 	esac
 	nfcunmount
+}
+
+ctreinstall()
+{
+	show "Get informations about last installation" 1
+	id=$1
+	shift
+	newparams="$@"
+	if [ "$id" == "" ]; then
+		show "No id is specified" ERR
+		exit
+	fi
+	pct start $id
+	volume="vol-$id"
+	cmdline=$(cat $servermount/$volume/install/args)
+	git=$(echo "$cmdline"|sed 's/^.*-g \([^ ]*\).*$/\1/')
+	if [ "$git" == "" ]; then
+		git=$(echo "$cmdline"|sed 's/^.*--git \([^ ]*\).*$/\1/')
+	fi
+	params=$(echo "$cmdline"|sed 's/^.*-P \([^ ]*\).*$/\1/')
+	if [ "$params" == "" ]; then
+		params=$(echo "$cmdline"|sed 's/^.*--params \([^ ]*\).*$/\1/')
+		cmdline=$(echo "$cmdline"|sed 's/--params *[^ ]*//g')	
+	else
+		cmdline=$(echo "$cmdline"|sed 's/-P *[^ ]*//g')	
+	fi
+	cmdline=$(echo "$cmdline -P $newparams"|sed 's/  */ /g')
+	ALLARGS="admin $cmdline"
+	show "Last parameters: $params"
+	show "New parameters : $newparams"
+	show "git repository : $git"
+	show "Command line   : $cmdline"
+	read -p "Reinstall with this parameters ? [y/n]" answer
+	if [ "$answer" == "y" ]; then
+		if [ "$git" != "" ]; then
+			echo  "rm -rf /srv/install && mkdir -p /srv/install && git clone $git /srv/install && echo \"$ALLARGS\" > /srv/install/args"|pct enter $id
+		fi
+		allparams=$(echo "$newparams"|tr "," " ")
+		afile=$(pct exec $id -- /bin/bash -c "ls /srv/install"|grep "install.sh")
+        	if [ "$afile" != "" ]; then
+                	pct exec $id -- /bin/bash -c "chmod 755 /srv/install/install.sh && /srv/install/install.sh $allparams"
+        	fi
+	fi
 }
 
 ctcreate()
@@ -949,12 +993,12 @@ docker network create proxy \n\
 rc-update add docker \n"|pct enter $lastid
 	fi
 	if [ "$git" != "" ]; then
-		echo  "mkdir /srv/local && git clone $git /srv/local && echo \"$ALLARGS\" > /srv/local/arguments"|pct enter $lastid
+		echo  "mkdir /srv/install && git clone $git /srv/install && echo \"$ALLARGS\" > /srv/install/args"|pct enter $lastid
 	fi
 	allparams=$(echo "$params"|tr "," " ")
-	afile=$(pct exec $lastid -- /bin/bash -c "ls /srv/local"|grep "install.sh")
+	afile=$(pct exec $lastid -- /bin/bash -c "ls /srv/install"|grep "install.sh")
         if [ "$afile" != "" ]; then
-                pct exec $lastid -- /bin/bash -c "chmod 755 /srv/local/install.sh && /srv/local/install.sh $allparams"
+                pct exec $lastid -- /bin/bash -c "chmod 755 /srv/install/install.sh && /srv/install/install.sh $allparams"
         fi
 }
 
@@ -1340,6 +1384,9 @@ fi
 case "$command" in
 ctcreate)
 	ctcreate $@
+      	;;
+ctreinstall)
+	ctreinstall $@
       	;;
 ctdelete)
 	ctdelete $@
