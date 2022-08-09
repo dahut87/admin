@@ -62,58 +62,97 @@ admin upgrade
 
 Le dossier /root/assets contient plusieurs fichiers essentiels au fonctionnement de la commande admin. Il contient aussi un fichier config qui permet de configurer la commande admin.
 
-**Configuration des templates utilisés pour les 3 os supportés par la commande admin (dans **
+**Configuration des templates utilisés pour les 3 os supportés par la commande admin**
+
+```
 debian=debian-2022.tgz
 ubuntu=ubuntu-2022.tgz
 alpine=alpine-2022.tgz
+```
 
 **Nom des réseaux supportés par la commande admin, la première lettre est le raccourci utilisé pour désigner un réseau dans la commande admin: il est donc important que chaque nom de réseau débute par un caractère différent.**
+
+```
 net_ALL=admin,local
+```
 
 **Pour chaque réseau il faudra rajouter six entrées qui définissent le réseau, son CIDR, le VLAN tag, la passerelle, le domaine de recherche et le pont utilisé.**
+
+```
 netL_prefix=192.168.1
 netL_cidr=24
 netL_tag=no
 netL_gw=1
 netL_br=vmbr1
 netL_search=local.lan
+```
 
 **Le dns est défini de façon globale**
+
+```
 dns="192.168.1.1"
+```
 
 **Le nom du volume ZFS et le point de montage d'un volume ZFS supplémentaire pour héberger les données produites par les conteneurs doit être renseigné**
+
+```
 serverpool="datapool/serveur"
 servermount="/srv/serveur"
+```
 
 **Si vous utilisez des duplicata de volume ZFS par la commande syncoid, vous pouvez surveiller leur réplication par la sous-commande "admin rapport". Il faut renseigner le nom de volume ici.**
+
+```
 dup1="volume/serveur_dup"
 dup2="volume/donnees_dup"
+```
 
 **Pour la surveillance de votre volume de données par la sous-commande "admin rapport". Il faut renseigner le nom de volume ici.**
+
+```
 datapool="datapool/donnees"
+```
 
 **Pour la surveillance de votre onduleur par la sous-commande "admin rapport". Il faut renseigner la commande de surveillance ici. Il est impératif d'avoir configurer celle-ci préalablement**
+
+```
 load=$(upsc onduleur@localhost battery.charge > /dev/stdout 2> /dev/null)
 status=$(upsc onduleur@localhost ups.status > /dev/stdout 2> /dev/null)
+```
 
 **Afin de configurer l'option d'envoi de courriel, il est impératif de configurer GPG et renseigner les courriels ici.**
+
+```
 src="email@expediteur.fr"
 dst="email@destinataire.fr"
+```
 
 **Après la création de conteneurs ALPINE (UNIQUEMENT), il est possible d'exécuter des commandes pour personnaliser ceux-ci.**
+
+```
 customize="adduser utilisateur -D -s /bin/false -u 1002 niko \n\
 groupmod utilisateur -g 1002 \n\
 addgroup -g 1030 commun \n"
+```
 
 **Volumes à synchroniser/voir/vérifier par rclone sur pCloud.**
+
+```
 rclone_vols=/srv/local
+```
 
 **Chemin distant utilisé pour stocker les données pCloud.**
+
+```
 rclone_path=serveur
+```
 
 **Configuration du serveur REST qui communique avec signal et du numéro de téléphone à utiliser.**
+
+```
 signal_host="signal.lan"
 signal_num="+33611111111"
+```
 
 ## Utilisation
 
@@ -146,7 +185,7 @@ admin disktemp tosignal
 Lors de l'usage de conteneurs non privilégier il est important de dresser une cartographie des UID et GID qui réalisent une correspondance entre ceux de l'hôte et ceux des conteneurs clients.
 
 Une cartographie est imposée par la commande admin:
-
+```
  uid:gid  ->  uid:gid
 1002:1002 -> 1002:1002
 1027:1027 -> 1027:1027
@@ -155,6 +194,7 @@ Une cartographie est imposée par la commande admin:
      1030 ->     :1030
 XXXX:XXXX -> 10XXXX:10XXXX
 0000:0000 -> 100000:100000
+```
 
 Les uids/guids 1002,1027,1028,1029 et le gid 1030 sont identiques sur l'hôte et sur les conteneurs clients. Les autres sont transformés en ajoutant 100000. Ainsi root possède l'ID 100000 sur l'hôte lorsque le client utilise 0.
 
