@@ -1374,7 +1374,7 @@ tomail()
 rapport()
 {
 	show '<html> <head> <title>Rapport NAS</title> <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"> </head> <style type="text/css">body{ background-color: #000; }.white{ color: #FFF; }</style><body><pre class="white">'
-	name=$(hostname -A)
+	name=$(hostname)
 	title=$(figlet ${name})
 	date=$(date)
 	show "$title\nDate rapport: ${date}"
