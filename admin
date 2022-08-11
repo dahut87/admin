@@ -531,6 +531,7 @@ nfcinstall()
 	systemctl start zfs-load-keys.service	
 	show "Adding packages" 1
 	apt install -y libnfc-examples libnfc-bin libfreefare-bin python3-pip
+	pip install click==8.0.4
 	pip install ndeftool
 	show "Configuring nfc reader" 1
 	mkdir -p /etc/nfc/devices.d/

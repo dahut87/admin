@@ -87,7 +87,7 @@ groupmod time -g 1027 \n\
 addgroup -g 1030 nous \n"
 
 ## Volumes for rclone
-rclone_vols=/srv/donnees/Commun,/srv/donnees/Niko,/srv/donnees/Audrey,/srv/Serveur
+rclone_vols=/srv/donnees/Commun,/srv/donnees/Niko,/srv/donnees/Audrey,/srv/serveur
 
 ## Path on cloud
 rclone_path=nas
