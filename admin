@@ -645,14 +645,14 @@ EOF
 	show "<< PUT A TAG ON READER TO TEST IT >>"
 	show "Test NFC reader : BASE" 1
 	nfc-list
-	show "Test NFC reader : writing" 1
-	nfcwrite key1,key2,key3,key3,alotofkeytoseeifitsoknow
+	#show "Test NFC reader : writing" 1
+	#nfcwrite key1,key2,key3,key3,alotofkeytoseeifitsoknow
 	show "Test NFC reader : reading" 1
 	nfcread
 	show "Test NFC reader : virtual dir" 1
 	nfcmount
 	cat /mnt/usb/*
-	nfcumount
+	nfcunmount
 	show "Start ultimate ZFS key load service" 1
 	systemctl start zfs-load-keys.service	
 }
