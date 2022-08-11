@@ -392,24 +392,24 @@ nfcmountonly()
 
 nfcmount()
 {
-	nfcmountonly
-	values=$(mifare-classic-read-ndef -y -o -|/usr/local/bin/ndeftool load - print)
-	if [ -z "${values}" ]; then
-		wrong
-       		show "No data" ERR
-		nfcunmount
-       		exit
-	else
-		ok
-	fi
-	show "Recreating key volumes"
-	keys=$(echo "${values}"|sed "s/.*ID '\(key[ 1-9]*\)'.*/\1/g")
-	while read -r key;
-	do
-        	value=$(echo "$values"|grep "ID '$key'"|sed "s/NDEF Text Record ID '[^']*' Text '\(.*\)' Language 'en' Encoding 'UTF-8'/\1/g")
-        	echo "$value" > "/mnt/usb/$key" 
-	done < <(echo "$keys")
-	ls /mnt/usb/key*
+        nfcmountonly
+        values=$(mifare-classic-read-ndef -y -o -|/usr/local/bin/ndeftool load - print)
+        if [ -z "${values}" ]; then
+                wrong
+                show "No data" ERR
+                nfcunmount
+                exit
+        else
+                ok
+        fi
+        show "Recreating key volumes"
+        keys=$(echo "${values}"|sed "s/.*ID '\(key[ 1-9]*\)'.*/\1/g")
+        while read -r key;
+        do
+                value=$(echo "$values"|grep "ID '$key'"|sed "s/NDEF Text Record ID '[^']*' Text '\(.*\)' Language 'en' Encoding 'UTF-8'/\1/g")
+                echo "$value" > "/mnt/usb/$key"
+        done < <(echo "$keys")
+        ls /mnt/usb/key*
 }
 
 nfcclear()
@@ -443,7 +443,7 @@ nfccopy()
 {	
 	nfcmountonly
 	rm -rf /mnt/usb/temp
-	mifare-classic-read-ndef -y -o -|/usr/local/bin/ndeftool load - save /mnt/usb/temp
+	mifare-classic-read-ndef -y -o -|/usr/local/bin/ndeftool load - save /mnt/usb/
 	value=$(cat /mnt/usb/temp)
 	if [ ! -z "$value" ]; then
 		ok
@@ -460,6 +460,103 @@ nfccopy()
 	rm -rf /mnt/usb/temp	
 	nfcunmount
 }	
+
+nfcdelkey()
+{
+	if [ -z "$1" ]; then
+		show "Usage: admin nfcdelkey keyX" 1
+		show ""
+		show "Delete a key on NFC tag"
+		exit
+	fi
+	verify=$(echo "$1"|sed -n 's/^\(key[0-9]\+\)$/\1/p'|grep "key")
+	if [ -z "$verify" ]; then
+		show "Bad argument, need a keyX key" ERR
+		exit
+	fi
+	enr=$(mifare-classic-read-ndef -y -o -|/usr/local/bin/ndeftool load - print|grep "key")
+	verify=$(echo -en "$enr"|grep "$1")
+	if [ -z "$verify" ]; then
+		show "Key '$1' not exist" ERR
+		exit
+	else
+		enr=$(echo "$enr\n"|grep -v "ID '$1'")
+		nfcmake "$enr"
+	fi
+}
+
+nfcaddkey()
+{
+	if [ -z "$1" ]; then
+		show "Usage: admin nfcaddkey keyX,keyvalue" 1
+		show ""
+		show "Add a key on NFC tag"
+		exit
+	fi
+	verify=$(echo "$1"|sed -n 's/^\(key[0-9]\+\)$/\1/p'|grep "key")
+	if [ -z "$verify" ]; then
+		show "Bad argument, need a keyX key" ERR
+		exit
+	fi
+	enr=$(mifare-classic-read-ndef -y -o -|/usr/local/bin/ndeftool load - print|grep "key")
+	verify=$(echo -en "$enr"|grep "$1")
+	if [ ! -z "$verify" ]; then
+		show "Key '$1' already exist" ERR
+		exit
+	else
+		enr=$(echo "$enr"|grep -v "ID '$1'")
+		enr="$enr\nNDEF Text Record ID '$1' Text '$2' Language 'en' Encoding 'UTF-8'\n"
+		nfcmake "$enr"
+	fi
+}
+
+nfcmake()
+{
+	echo -en "$1"
+	string="/usr/local/bin/ndeftool"
+	while read enr; do
+		key=$(echo "${enr}"|sed "s/.*ID '\(key[ 1-9]*\)'.*/\1/g")
+		value=$(echo "${enr}"|grep "ID '$key'"|sed "s/NDEF Text Record ID '[^']*' Text '\(.*\)' Language 'en' Encoding 'UTF-8'/\1/g")
+		if [ ! -z "$key" ]; then
+			if [ ! -z "$value" ]; then
+				string="$string text \"$value\" id \"$key\""
+			fi
+		fi
+	done < <(echo -e "$1")
+	show "Show key data" 1
+	bash -c "$string print"
+	show "Write key data to temp" 1
+	bash -c "$string save -f /mnt/usb/towrite"
+	show "Write key data to tag" 1
+	mifare-classic-write-ndef -y -i /mnt/usb/towrite
+	rm -rf /mnt/usb/temp	
+	nfcunmount
+}
+
+nfcsetkey()
+{
+	if [ -z "$1" ]; then
+		show "Usage: admin nfcsetkey keyX,keyvalue" 1
+		show ""
+		show "Change a key value on NFC tag"
+		exit
+	fi
+	verify=$(echo "$1"|sed -n 's/^\(key[0-9]\+\)$/\1/p'|grep "key")
+	if [ -z "$verify" ]; then
+		show "Bad argument, need a keyX key" ERR
+		exit
+	fi
+	enr=$(mifare-classic-read-ndef -y -o -|/usr/local/bin/ndeftool load - print|grep "key")
+	verify=$(echo -en "$enr"|grep "$1")
+	if [ -z "$verify" ]; then
+		show "Key '$1' not exist" ERR
+		exit
+	else
+		enr=$(echo "$enr"|grep -v "ID '$1'")
+		enr="$enr\nNDEF Text Record ID '$1' Text '$2' Language 'en' Encoding 'UTF-8'\n"
+		nfcmake "$enr"
+	fi
+}
 
 nfcwrite()
 {	
@@ -730,6 +827,9 @@ help()
 	show "nfcreadraw	- read nfc tag with low level NOARG"
 	show "nfcread		- read nfc tag NOARG"
 	show "nfcwrite	- write keys comma separated on a tag 1ARG"
+	show "nfcaddkey	- Add key ton a tag 2ARG"
+	show "nfcsetkey	- Change a key value on a tag 2ARG"
+	show "nfcdelkey	- Delete a key on a tag 2ARG"
 	show "nfcobfuscate	- obsfuscate tag NOARG"
 	show "nfccopy		- copy nfc tag NOARG"
 	show "nfccopyraw	- copy nfc tag with low level NOARG"
@@ -1549,6 +1649,15 @@ nfcreadraw)
 	;;
 nfcwrite)
       	nfcwrite $@
+	;;
+nfcsetkey)
+      	nfcsetkey $@
+	;;
+nfcaddkey)
+      	nfcaddkey $@
+	;;
+nfcdelkey)
+      	nfcdelkey $@
 	;;
 nfccopy)
 	nfccopy
