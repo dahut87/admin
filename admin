@@ -904,7 +904,7 @@ rcloneapp()
 			dst=${dstemp^}
 			show "$src => $dst"
 			echo "$src => $dst" >> /var/log/rclone.log
-			rclone --config /mnt/usb/rclone/rclone.conf sync -c -P --checkers=20 --low-level-retries=10 --retries=10 --retries-sleep=1s --transfers=20 $src crypt:/${dst}/  2>&1 | tee -a /var/log/rclone.log
+			rclone --config /mnt/usb/rclone/rclone.conf sync -c -P --checkers=20 --low-level-retries=10 --retries=10 --retries-sleep=1s --exclude-if-present .ignore --exclude=/.zfs/** --transfers=20 $src crypt:/${dst}/  2>&1 | tee -a /var/log/rclone.log
 		done < <(echo "$rclone_vols"|tr "," "\n")
 		echo "***********************************" >> /var/log/rclone.log
 	;;
@@ -923,7 +923,7 @@ rcloneapp()
 			dst=${dstemp^}
 			show "$src => $dst"
 			echo "$src => $dst" >> /var/log/rclone.log
-			rclone --config /mnt/usb/rclone/rclone.conf check -c -P --differ /var/log/differ_${dst}.log --checkers=20 --low-level-retries=10 --retries=10 --retries-sleep=1s --transfers=20 $src crypt:/${dst}/  2>&1 | tee -a /var/log/rclone.log
+			rclone --config /mnt/usb/rclone/rclone.conf check -c -P --differ /var/log/differ_${dst}.log --checkers=20 --low-level-retries=10 --retries=10 --retries-sleep=1s --exclude-if-present .ignore --exclude=/.zfs/** --transfers=20 $src crypt:/${dst}/  2>&1 | tee -a /var/log/rclone.log
 		done < <(echo "$rclone_vols"|tr "," "\n")
 		echo "***********************************" >> /var/log/rclone.log
 	;;
