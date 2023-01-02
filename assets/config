@@ -9,40 +9,40 @@ net_ALL=server,admin,dmz,client,local
 netL_prefix=192.168.1
 netL_cidr=24
 netL_tag=no
-netL_gw=1
+netL_gw=254
 netL_br=vmbr1
-netL_search=local.lan
+netL_search=local.ia64.cc
 ## Type SERVER
 netS_prefix=192.168.10
 netS_cidr=24
 netS_tag=10
 netS_gw=254
 netS_br=vmbr1
-netS_search=server.lan
+netS_search=server.ia64.cc
 ## Type CLIENT
-netC_prefix=192.168.100
+netC_prefix=192.168.15
 netC_cidr=24
-netC_tag=100
+netC_tag=15
 netC_gw=254
 netC_br=vmbr1
 netC_search=client.lan
 ## Type DMZ
-netD_prefix=192.168.200
+netD_prefix=192.168.20
 netD_cidr=24
-netD_tag=200
+netD_tag=20
 netD_gw=254
 netD_br=vmbr1
-netD_search=dmz.lan
+netD_search=dmz.ia64.cc
 ## Type ADMIN
 netA_prefix=10.0.0
 netA_cidr=16
 netA_tag=no
 netA_gw=no
 netA_br=vmbr0
-netA_search=admin.lan
+netA_search=admin.ia64.cc
 
 ## DNS used by containers
-dns="192.168.200.1"
+dns="192.168.20.1"
 
 ## ZFS volume for storing data
 serverpool="datapool/serveur"
@@ -87,10 +87,17 @@ groupmod time -g 1027 \n\
 addgroup -g 1030 nous \n"
 
 ## Volumes for rclone
-rclone_vols=/srv/donnees/Commun,/srv/donnees/Niko,/srv/donnees/Audrey,/srv/serveur
+#rclone_vols=/srv/donnees/Commun,/srv/donnees/Niko,/srv/donnees/Audrey,/srv/serveur
+rclone_vols=/srv/serveur
 
 ## Path on cloud
-rclone_path=nas
+rclone_path="/backup/rclone"
+
+## Restic configuration
+restic_path="/backup/restic"
+keep_monthly="12"
+keep_weekly="10"
+keep_daily="31"
 
 ##Configuration de signal
 signal_host="signal.mon.admin.lan"

@@ -146,6 +146,7 @@ netconfig()
 		allsearch="echo \$net${net^}_search"
 		search=$(eval "$allsearch")
 		if [[ "$nets" == *"$net"* ]]; then
+			echo $(findfreeip $range $2)
 			ip=$(findfreeip $range $2)
 			if [ "$tag" != "no" ]; then
 				fulltag=",tag=$tag"
@@ -645,14 +646,14 @@ EOF
 	show "<< PUT A TAG ON READER TO TEST IT >>"
 	show "Test NFC reader : BASE" 1
 	nfc-list
-	#show "Test NFC reader : writing" 1
-	#nfcwrite key1,key2,key3,key3,alotofkeytoseeifitsoknow
+	show "Test NFC reader : writing" 1
+	nfcwrite key1,key2,key3,key3,alotofkeytoseeifitsoknow
 	show "Test NFC reader : reading" 1
 	nfcread
 	show "Test NFC reader : virtual dir" 1
 	nfcmount
 	cat /mnt/usb/*
-	nfcunmount
+	nfcumount
 	show "Start ultimate ZFS key load service" 1
 	systemctl start zfs-load-keys.service	
 }
@@ -702,7 +703,7 @@ token = {"access_token":"%key1%","token_type":"bearer","expiry":"0001-01-01T00:0
 
 [crypt]
 type = crypt
-remote = pcloud:/$rclone_path
+remote = pcloud:$1
 filename_encryption = standard
 directory_name_encryption = true
 password = %key2%
@@ -752,7 +753,7 @@ lastid()
 findfreeip()
 {
 	if [ "$2" != "" ]; then
-		#show "Search ip in preferential list" 1
+		show "Search ip in preferential list" 1
 		while read ip; do
 			if [[ "$ip" == "$1."* ]]; then
 				echo -en "$ip"
@@ -761,9 +762,10 @@ findfreeip()
 		done < <(echo "$2"|tr "," "\n")	
 
 	fi
-	#show "Search ip by dns & nmap" 1
+	show "Search ip nmap & DNS" 1
 	for i in {1..254}; do 
 		domain=$(nslookup $1.$i $dns|grep NXDOMAIN)
+echo $i
 		if [ -z "$domain" ]; then
 			show -en "$1.$i"
 			exit
@@ -880,12 +882,96 @@ help_rclone()
 {
 	show "Usage: admin rclone [ sync|view|check ]" 1
 	show ""
-	show "Use the rclone backend to make some cloud operations"
+	show "Use the rclone backend to make cloud mirror operations"
 	show ""
         show "sync     : perform a sync with the cloud"
         show "view     : view interactivly server data"
 	show "check    : check integrity of distant data"
 	exit 2
+}
+
+help_restic()
+{
+	show "Usage: admin restic [ init|snapshots|check|backup|prune|remove ]" 1
+	show ""
+	show "Use the restic backend to make some cloud backup operations"
+	show ""
+        show "init      : initialize the data storage on cloud"
+        show "snapshots : view snapshots stored on cloud"
+	show "check     : check integrity of distant data"
+	show "backup    : perform a backup on cloud"
+	show "prune     : purge unused data on cloud storage"
+	show "remove    : remove a snapshot store on cloud"
+	exit 2
+}
+
+resticapp()
+{
+	if [ -z "$1" ]; then
+		help_restic
+	fi
+	RCLONE_CONFIG="/mnt/usb/rclone/rclone.conf"
+	RESTIC_PASSWORD="Biloijkjhkjh876n"
+	export RCLONE_CONFIG
+	export RESTIC_PASSWORD
+	case "$1" in
+	init)
+		show "Initializing..." 1
+		echo "********* Initialiazing *************" >> /var/log/restic.log
+		date >> /var/log/restc.log
+		rclonemount $restic_path
+		restic init -r rclone:crypt:/ | tee -a /var/log/restic.log
+		echo "***********************************" >> /var/log/restic.log
+	;;
+	snapshots)
+		show "View..." 1
+		rclonemount $restic_path
+		restic snapshots -r rclone:crypt:/
+	;;
+	check)
+		show "Check..." 1
+		echo "************** Check **************" >> /var/log/restic.log
+		date >> /var/log/restic.log
+		rclonemount $restic_path
+		restic check --read-data -r rclone:crypt:/ | tee -a /var/log/restic.log
+		echo "***********************************" >> /var/log/restic.log
+	;;
+	prune)
+		show "Cleaning..." 1
+		echo "************** Cleaning **************" >> /var/log/restic.log
+		date >> /var/log/restic.log
+		rclonemount $restic_path
+		restic prune -r rclone:crypt:/ | tee -a /var/log/restic.log
+		echo "***********************************" >> /var/log/restic.log
+	;;
+	remove)
+		show "Removing..." 1
+		echo "************** Removing **************" >> /var/log/restic.log
+		date >> /var/log/restic.log
+		rclonemount $restic_path
+		restic forget $2 -r rclone:crypt:/ | tee -a /var/log/restic.log
+		echo "***********************************" >> /var/log/restic.log
+		;;
+        backup)
+                show "Backing up..." 1
+                echo "************** Backup **************" >> /var/log/restic.log
+                date >> /var/log/restic.log
+                rclonemount $restic_path
+                while read src; do
+                        dstemp=$(basename "${src^}")
+                        dst=${dstemp^}
+                        show "$src => $dst"
+                        echo "$src => $dst" >> /var/log/restic.log
+			restic backup $src -r rclone:crypt:/ --verbose=2 --exclude ".zfs/**" --tag admin_command|tee -a /var/log/restic.log
+			restic forget -r rclone:crypt:/ --tag admin_command --keep-monthly=$keep_monthly --keep-weekly=$keep_weekly --keep-daily=$keep_daily
+                done < <(echo "$rclone_vols"|tr "," "\n")
+                echo "***********************************" >> /var/log/restic.log
+        ;;
+	*)
+	help_restic
+	;;
+	esac
+	nfcunmount
 }
 
 rcloneapp()
@@ -898,32 +984,32 @@ rcloneapp()
 		show "Synchronize..." 1
 		echo "********* Synchonize *************" >> /var/log/rclone.log
 		date >> /var/log/rclone.log
-		rclonemount	
+		rclonemount $rclone_path
 		while read src; do
 			dstemp=$(basename "${src^}")
 			dst=${dstemp^}
 			show "$src => $dst"
 			echo "$src => $dst" >> /var/log/rclone.log
-			rclone --config /mnt/usb/rclone/rclone.conf sync -c -P --checkers=20 --low-level-retries=10 --retries=10 --retries-sleep=1s --exclude-if-present .ignore --exclude=/.zfs/** --transfers=20 $src crypt:/${dst}/  2>&1 | tee -a /var/log/rclone.log
+			rclone --config /mnt/usb/rclone/rclone.conf sync -c -P --links --checkers=20 --low-level-retries=10 --retries=10 --retries-sleep=1s --transfers=20 --delete-excluded --exclude ".zfs/**" $src crypt:/${dst}/  2>&1 | tee -a /var/log/rclone.log
 		done < <(echo "$rclone_vols"|tr "," "\n")
 		echo "***********************************" >> /var/log/rclone.log
 	;;
 	view)
 		show "View..." 1
-		rclonemount	
+		rclonemount $rclone_path	
 		rclone --config /mnt/usb/rclone/rclone.conf ncdu crypt:
 	;;
 	check)
 		show "Check..." 1
 		echo "************** Check **************" >> /var/log/rclone.log
 		date >> /var/log/rclone.log
-		rclonemount	
+		rclonemount $rclone_path	
 		while read src; do
 			dstemp=$(basename "${src^}")
 			dst=${dstemp^}
 			show "$src => $dst"
 			echo "$src => $dst" >> /var/log/rclone.log
-			rclone --config /mnt/usb/rclone/rclone.conf check -c -P --differ /var/log/differ_${dst}.log --checkers=20 --low-level-retries=10 --retries=10 --retries-sleep=1s --exclude-if-present .ignore --exclude=/.zfs/** --transfers=20 $src crypt:/${dst}/  2>&1 | tee -a /var/log/rclone.log
+			rclone --config /mnt/usb/rclone/rclone.conf check -c -P --differ /var/log/differ_${dst}.log --links --checkers=20 --low-level-retries=10 --retries=10 --retries-sleep=1s --transfers=20 --exclude ".zfs/**" $src crypt:/${dst}/  2>&1 | tee -a /var/log/rclone.log
 		done < <(echo "$rclone_vols"|tr "," "\n")
 		echo "***********************************" >> /var/log/rclone.log
 	;;
@@ -1127,12 +1213,14 @@ ctcreate()
 			exit
 		fi
 	fi
+	netconfig $net $ip
+exit
 	passwd=$(cat /root/.passwd)
 	allpass="echo $passwd"
 	pass=$(eval "$allpass")
 	zfscreate $volume
 	search=$(getsearchdomain)
-	pct create $lastid /var/lib/vz/template/cache/$files \
+	echo pct create $lastid /var/lib/vz/template/cache/$files \
     	--arch amd64 \
     	--ostype $os \
     	--hostname "$name" \
@@ -1374,7 +1462,7 @@ tomail()
 rapport()
 {
 	show '<html> <head> <title>Rapport NAS</title> <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"> </head> <style type="text/css">body{ background-color: #000; }.white{ color: #FFF; }</style><body><pre class="white">'
-	name=$(hostname)
+	name=$(hostname -A)
 	title=$(figlet ${name})
 	date=$(date)
 	show "$title\nDate rapport: ${date}"
@@ -1617,6 +1705,9 @@ diskhealth)
 rapport)
 	rapport
       	;;
+restic)
+	resticapp $1 $2
+	;;
 rclone)
 	rcloneapp $1
       	;;
