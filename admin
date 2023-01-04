@@ -975,7 +975,7 @@ resticapp()
                         show "$src => $dst"
                         echo "$src => $dst" >> /var/log/restic.log
 			restic backup $src -r rclone:crypt:/ --verbose=2 $excluded --exclude ".zfs/**" --tag admin_command|tee -a /var/log/restic.log
-			echo restic forget -r rclone:crypt:/ --tag admin_command --keep-monthly=$keep_monthly --keep-weekly=$keep_weekly --keep-daily=$keep_daily
+			restic forget -r rclone:crypt:/ --tag admin_command --keep-monthly=$keep_monthly --keep-weekly=$keep_weekly --keep-daily=$keep_daily
                 done < <(echo "$restic_vols"|tr "," "\n")
                 echo "***********************************" >> /var/log/restic.log
         ;;
