@@ -820,6 +820,7 @@ help()
 	show "rapport		- create HTML report NOARG"
 	show "close		- close all temp directory NOARG"
 	show "rclone		- sync, check data to cloud 1ARG"
+	show "restic		- backup data to cloud 1/2ARG"
 	show "stop		- stop PVE (with VM&CT) NOARG"
 	show "start		- start PVE NOARG"
 	show "iommugroups	- view iommu configuration NOARG"
@@ -902,6 +903,7 @@ help_restic()
 	show "backup    : perform a backup on cloud"
 	show "prune     : purge unused data on cloud storage"
 	show "remove    : remove a snapshot store on cloud"
+	show "unlock    : unlock data storage on cloud"
 	exit 2
 }
 
@@ -911,7 +913,7 @@ resticapp()
 		help_restic
 	fi
 	RCLONE_CONFIG="/mnt/usb/rclone/rclone.conf"
-	RESTIC_PASSWORD="Biloijkjhkjh876n"
+	RESTIC_PASSWORD="$restic_passwd"
 	export RCLONE_CONFIG
 	export RESTIC_PASSWORD
 	case "$1" in
@@ -921,6 +923,14 @@ resticapp()
 		date >> /var/log/restc.log
 		rclonemount $restic_path
 		restic init -r rclone:crypt:/ | tee -a /var/log/restic.log
+		echo "***********************************" >> /var/log/restic.log
+	;;
+	unlock)
+		show "Unlocking..." 1
+		echo "********* Unlocking *************" >> /var/log/restic.log
+		date >> /var/log/restc.log
+		rclonemount $restic_path
+		restic unlock -r rclone:crypt:/ | tee -a /var/log/restic.log
 		echo "***********************************" >> /var/log/restic.log
 	;;
 	snapshots)
@@ -934,6 +944,7 @@ resticapp()
 		date >> /var/log/restic.log
 		rclonemount $restic_path
 		restic check --read-data -r rclone:crypt:/ | tee -a /var/log/restic.log
+		restic rebuild-index -r rclone:crypt:/ | tee -a /var/log/restic.log
 		echo "***********************************" >> /var/log/restic.log
 	;;
 	prune)
@@ -957,14 +968,16 @@ resticapp()
                 echo "************** Backup **************" >> /var/log/restic.log
                 date >> /var/log/restic.log
                 rclonemount $restic_path
+                excluded=$(excludepath $restic_exclude)
                 while read src; do
                         dstemp=$(basename "${src^}")
                         dst=${dstemp^}
                         show "$src => $dst"
                         echo "$src => $dst" >> /var/log/restic.log
-			restic backup $src -r rclone:crypt:/ --verbose=2 --exclude ".zfs/**" --tag admin_command|tee -a /var/log/restic.log
-			restic forget -r rclone:crypt:/ --tag admin_command --keep-monthly=$keep_monthly --keep-weekly=$keep_weekly --keep-daily=$keep_daily
-                done < <(echo "$rclone_vols"|tr "," "\n")
+			restic backup $src -r rclone:crypt:/ --verbose=2 $excluded --exclude ".zfs/**" --tag admin_command|tee -a /var/log/restic.log
+				exit
+			echo restic forget -r rclone:crypt:/ --tag admin_command --keep-monthly=$keep_monthly --keep-weekly=$keep_weekly --keep-daily=$keep_daily
+                done < <(echo "$restic_vols"|tr "," "\n")
                 echo "***********************************" >> /var/log/restic.log
         ;;
 	*)
@@ -972,6 +985,17 @@ resticapp()
 	;;
 	esac
 	nfcunmount
+}
+
+excludepath()
+{
+	exclude=""
+        while read src; do
+		if [ ! -z "$src" ]; then
+			exclude="$exclude --exclude $src"
+		fi
+        done < <(echo "$1"|tr "," "\n")
+	echo "$exclude"
 }
 
 rcloneapp()
@@ -985,12 +1009,13 @@ rcloneapp()
 		echo "********* Synchonize *************" >> /var/log/rclone.log
 		date >> /var/log/rclone.log
 		rclonemount $rclone_path
+		excluded=$(excludepath $rclone_exclude)
 		while read src; do
 			dstemp=$(basename "${src^}")
 			dst=${dstemp^}
 			show "$src => $dst"
 			echo "$src => $dst" >> /var/log/rclone.log
-			rclone --config /mnt/usb/rclone/rclone.conf sync -c -P --links --checkers=20 --low-level-retries=10 --retries=10 --retries-sleep=1s --transfers=20 --delete-excluded --exclude ".zfs/**" $src crypt:/${dst}/  2>&1 | tee -a /var/log/rclone.log
+			rclone --config /mnt/usb/rclone/rclone.conf sync -c -P --links --checkers=20 --low-level-retries=10 --retries=10 --retries-sleep=1s --transfers=20 --delete-excluded $excluded --exclude ".zfs/**" $src crypt:/${dst}/  2>&1 | tee -a /var/log/rclone.log
 		done < <(echo "$rclone_vols"|tr "," "\n")
 		echo "***********************************" >> /var/log/rclone.log
 	;;
@@ -1004,12 +1029,13 @@ rcloneapp()
 		echo "************** Check **************" >> /var/log/rclone.log
 		date >> /var/log/rclone.log
 		rclonemount $rclone_path	
+		excluded=$(excludepath $rclone_exclude)
 		while read src; do
 			dstemp=$(basename "${src^}")
 			dst=${dstemp^}
 			show "$src => $dst"
 			echo "$src => $dst" >> /var/log/rclone.log
-			rclone --config /mnt/usb/rclone/rclone.conf check -c -P --differ /var/log/differ_${dst}.log --links --checkers=20 --low-level-retries=10 --retries=10 --retries-sleep=1s --transfers=20 --exclude ".zfs/**" $src crypt:/${dst}/  2>&1 | tee -a /var/log/rclone.log
+			rclone --config /mnt/usb/rclone/rclone.conf check -c -P --differ /var/log/differ_${dst}.log --links --checkers=20 --low-level-retries=10 --retries=10 --retries-sleep=1s --transfers=20 $excluded --exclude ".zfs/**" $src crypt:/${dst}/  2>&1 | tee -a /var/log/rclone.log
 		done < <(echo "$rclone_vols"|tr "," "\n")
 		echo "***********************************" >> /var/log/rclone.log
 	;;

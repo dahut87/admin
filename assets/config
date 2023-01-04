@@ -87,13 +87,14 @@ groupmod time -g 1027 \n\
 addgroup -g 1030 nous \n"
 
 ## Volumes for rclone
-#rclone_vols=/srv/donnees/Commun,/srv/donnees/Niko,/srv/donnees/Audrey,/srv/serveur
-rclone_vols=/srv/serveur
-
-## Path on cloud
+rclone_vols=/srv/donnees/Commun,/srv/donnees/Niko,/srv/donnees/Audrey
 rclone_path="/backup/rclone"
+rclone_exclude=""
 
 ## Restic configuration
+restic_passwd=Biloijkjhkjh876n
+restic_vols=/srv/donnees/Commun,/srv/donnees/Niko,/srv/donnees/Audrey,/srv/serveur
+restic_exclude=srv/donnees/Commun/cartes/**,srv/donnees/Commun/photos/**
 restic_path="/backup/restic"
 keep_monthly="12"
 keep_weekly="10"
