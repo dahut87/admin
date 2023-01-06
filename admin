@@ -213,7 +213,7 @@ wrong()
 install()
 {
 	show "Install required packages" 1
-	apt install -y tree xxd bsdmainutils mime-construct s-nail htop libusb-1.0-0 beep lsscsi binutils-common binutils patch hddtemp lm-sensors xattr tmux pv jq net-tools figlet rclone sanoid zstd
+	apt install -y tree xxd bsdmainutils mime-construct s-nail htop libusb-1.0-0 beep lsscsi binutils-common binutils patch hddtemp lm-sensors xattr tmux pv jq net-tools figlet rclone sanoid zstd gpg
 	read -p "Do you want to use an AC/DC inverter ? [y/n] " answer
 	if [ "$answer" == "y" ]; then
 		apt install -y nut-client nut-server
@@ -813,6 +813,7 @@ help()
 	show "-< Disk"
 	show "disktemp	- view disk temperatures NOARG"
 	show "diskhealth	- view disk health NOARG"
+	show "running		- view running tasks NOARG"
 	show ""
 	show "-< Admin PVE"
 	show "install		- install admin command NOARG"
@@ -841,6 +842,12 @@ help()
 	show "nfcmount	- mount nfc card as a volume NOARG"
 	show "nfcunmount	- unmount nfc card NOARG"
 	show ""
+	show "-< MAIL"
+	show "config		- configure mail 3ARG"
+	show "test		- test sending mail NOARG"
+	show "purge		- delete mail queue NOARG"
+	show "info		- give informations about exim NOARG"
+	show "debog		- debug mail queue NOARG"
 	show "*tomail & tosignal, send to mail or to signal messenger the result of the command"
 	exit 2
 }
@@ -902,7 +909,7 @@ help_restic()
 	show "check     : check integrity of distant data"
 	show "backup    : perform a backup on cloud"
 	show "prune     : purge unused data on cloud storage"
-	show "remove    : remove a snapshot store on cloud"
+	show "remove ARG: remove a snapshot store on cloud"
 	show "unlock    : unlock data storage on cloud"
 	exit 2
 }
@@ -1388,20 +1395,53 @@ ctdelete()
 	fi
 }
 
+running()
+{
+	while read task; do
+		show "LXC: $task"
+	done < <(lxc-ls --stopped)
+	while read task; do
+		show "VM : $task"
+	done < <(qm list|grep -v "STATUS"|grep -v "running"|sed 's/^ *\([0-9]\+\) .*/\1/')
+}
+
 disktemp()
 {
-	temp=$(/usr/sbin/hddtemp $(ls /dev/sd?) -n|grep -v "sensor"|sort -nr|xargs echo)
-	high=$(echo "$temp"| cut -d ' ' -f1)
-	if [ "$high" -gt "40" ]; then
-		alert
-	fi
-	show "$temp"
+	while read disk; do
+		high=$(echo "$disk"|cut -d ':' -f3|sed 's/^ *\([0-9]\+\)°C/\1/')
+		if [ "$high" -gt "$max_temp" ]; then
+			#alert
+			value=$(echo "$disk"|cut -d ':' -f2-3)
+			show "$value"
+		fi
+	done < <(/usr/sbin/hddtemp $(ls /dev/sd?))
 }
 
 diskhealth()
 {
-	health=$(/usr/sbin/zpool status -pPL|grep "ONLINE"|grep "/dev"|sed 's/^.*\///g'|tr -s ' '|xargs echo)
-	show "$health"
+	while read disk; do
+		type=$(echo "$disk"|cut -d ' ' -f2)
+		if [ "$type" == "ONLINE" ]; then
+			DUMMY=""
+		elif [ "$type" == "AVAIL" ]; then
+			DUMMY=""
+		elif [ "$type" == "" ]; then
+			DUMMY=""
+		else
+			DUMMY="1"		
+		fi
+		errs=$(echo "$disk"|cut -d ' ' -f3-5)
+		if [ "$errs" == "0 0 0" ]; then
+			DUMMY="$DUMMY"
+		elif [ "$errs" == "" ]; then
+			DUMMY="$DUMMY"
+		else
+			DUMMY="1"
+		fi
+		if [ "$DUMMY" != "" ]; then
+			show "$disk"	
+		fi	
+	done < <(/usr/sbin/zpool status -pPL|grep "/dev"|sed 's/^.*\///g'|tr -s ' ')
 }
 
 iommugroups()
@@ -1469,6 +1509,165 @@ ctkillall()
 	lxc-ls --active -1
 }
 
+help_mail()
+{
+        show "Usage: admin mail [ config|test|purge|info|debog ]" 1
+        show ""
+        show "Perform operation on the mail system"
+        show ""
+        show "config  : initialize the mail system"
+        show "test    : test sending mail, if any arg send without GPG"
+        show "purge   : purge mail queue and restart all"
+        show "info    : give information on exim and mail system"
+        show "debog   : debug mail queue"
+        exit 2
+}
+
+mailapp()
+{
+        if [ -z "$1" ]; then
+                help_mail
+        fi
+        case "$1" in
+	debog)
+		exim -qff -v
+		;;
+	test)
+		sjt="[$mail_tag] mail test"
+		if [ ! -z "$2" ]; then
+			echo "This is a test"|s-nail -v -t -s "$sjt" -S from="${src}" ${dst}
+		else
+			echo "This is a test" > /tmp/rapport.html
+			enc="application/pgp-encrypted"
+			pms="Version: 1"
+			mime-construct --subpart --file-auto /tmp/rapport.html|gpg --trust-model always -ea -r "${src}" -r "${dst}"|mime-construct --to "${dst}" --subject "${sjt}" --multipart "multipart/encrypted; protocol=\"${enc}\"" --type "${enc}" --string "${pms}" --type application/octet-stream --file - --output|s-nail -v -t -s "${sjt}" -S from="${src}" ${dst}
+		fi
+		;;
+	purge)
+		exim4 -Mrm $(ls /var/spool/exim4/input/ | grep -- -H$ | cut -c 1-16)
+		systemctl restart exim4	
+		mailq 
+		;;
+	info)
+		show "Exim status" 1
+		systemctl status exim4	
+		show "Exim relay configuration" 1
+		/usr/sbin/exim4 -bt mail
+		queuesize=$(mailq|grep "<"|wc -l)
+		show "Queue information" 1
+		show "Size : $queuesize"
+		show "GPG keys" 1
+		keys=$(gpg --list-key $src $dst|grep "@"|sed 's/^[^]]*] [^<]*<\([^>]*\)>$/\1/')
+		key_src=$(echo $keys|grep "$src")
+		key_dst=$(echo $keys|grep "$src")
+		if [ ! -z "$key_src" ]; then
+			echo "Sender key present"
+		else
+			echo "Sender key not present"
+		fi
+		if [ ! -z "$key_dst" ]; then
+			echo "Receiver key present"
+		else
+			echo "Receiver key not present"
+		fi
+		;;
+        config)
+                show "Install needed components..." 1
+		apt install -y mailutils exim4 gpg
+		show "Generate GPG key" 1
+		iskey=$(gpg --list-keys $src|grep "$src")	
+		if [ -z "$iskey" ]; then
+			gpg --batch --passphrase '' --quick-gen-key "$src_name <$src>" ed25519 cert 0
+			fpr=$(gpg --list-options show-only-fpr-mbox --list-secret-keys | sed -r -n '$!d;s@^([^[:space:]]+).*@\1@g;p')
+			life="5y"
+			gpg --batch --pinentry-mode=loopback --passphrase '' --quick-add-key $fpr ed25519 sign $life
+			gpg --batch --pinentry-mode=loopback --passphrase '' --quick-add-key $fpr ed25519 auth $life
+			gpg --batch --pinentry-mode=loopback --passphrase '' --quick-add-key $fpr cv25519 encrypt $life
+		else
+			echo "Keys already generated"
+		fi
+		show "Get GPG key for receiver from servcer keys.openpgp.org" 1
+		echo "Searching and installing key..."
+		gpg --auto-key-locate keyserver --locate-keys $dst
+		show "Configure system files..." 1
+		read -s -p "SMTP password:" PASSWORD
+		show "SMTP: $smtp_login:XXXXXX@$smtp_server:$smtp_port"
+		show "$src -> $dst"
+		rm -rf /root/.forward
+		cat > /etc/aliases << EOF
+ostmaster: root
+nobody: root
+hostmaster: root
+webmaster: root
+www: root
+root: $dst
+EOF
+		cat > /etc/email-addresses << EOF
+# This is /etc/email-addresses. It is part of the exim package
+#
+# This file contains email addresses to use for outgoing mail. Any local
+# part not in here will be qualified by the system domain as normal.
+#
+# It should contain lines of the form:
+#
+#user: someone@isp.com
+#otheruser: someoneelse@anotherisp.com
+root: $src
+EOF
+		echo "AUTH_CLIENT_ALLOW_NOTLS_PASSWORDS = 1" > /etc/exim4/exim4.conf.localmacros
+		cat > /etc/exim4/update-exim4.conf.conf << EOF
+# /etc/exim4/update-exim4.conf.conf
+#
+# Edit this file and /etc/mailname by hand and execute update-exim4.conf
+# yourself or use 'dpkg-reconfigure exim4-config'
+#
+# Please note that this is _not_ a dpkg-conffile and that automatic changes
+# to this file might happen. The code handling this will honor your local
+# changes, so this is usually fine, but will break local schemes that mess
+# around with multiple versions of the file.
+#
+# update-exim4.conf uses this file to determine variable values to generate
+# exim configuration macros for the configuration file.
+#
+# Most settings found in here do have corresponding questions in the
+# Debconf configuration, but not all of them.
+#
+# This is a Debian specific file
+dc_eximconfig_configtype='smarthost'
+dc_other_hostnames='localhost'
+dc_local_interfaces='127.0.0.1'
+dc_readhost=''
+dc_relay_domains='localhost ; $(hostname -f)'
+dc_minimaldns='false'
+dc_relay_nets=''
+dc_smarthost='$smtp_server::$smtp_port'
+CFILEMODE='644'
+dc_use_split_config='false'
+dc_hide_mailname='true'
+dc_mailname_in_oh='true'
+dc_localdelivery='mail_spool'
+EOF
+	cat > /etc/exim4/passwd.client << EOF
+# password file used when the local exim is authenticating to a remote
+# host as a client.
+#
+# see exim4_passwd_client(5) for more documentation
+#
+# Example:
+### target.mail.server.example:login:password
+$smtp_server:$smtp_login:$PASSWORD
+EOF
+	echo "$(hostname -f)" > /etc/mailname
+	/etc/init.d/exim4 restart
+	show "Purge mail queue" 1
+	exim4 -Mrm $(ls /var/spool/exim4/input/ | grep -- -H$ | cut -c 1-16)
+	show "Show configuration" 1
+	/usr/sbin/exim4 -bt mail
+	show "Mail system is configured"
+        ;;
+	esac	
+}
+
 tosignal()
 {
 	/usr/bin/curl -X POST -k -H "Content-Type: application/json" "https://$signal_host/v2/send" -d "{\"message\": \"$(hostname): temp: $ALLSTR\", \"number\": \"$signal_num\", \"recipients\": [ \"$signal_num\" ]}"
@@ -1478,7 +1677,7 @@ tomail()
 {
 	rm -rf /tmp/rapport*
 	echo "$ALLSTR" 1> /tmp/rapport.html 2>/dev/null
-	sjt="[NAS] Rapport"
+	sjt="[$mail_tag] $command $subcommand"
 	enc="application/pgp-encrypted"
 	pms="Version: 1"
 	mime-construct --subpart --file-auto /tmp/rapport.html|gpg --trust-model always -ea -r "${src}" -r "${dst}"|mime-construct --to "${dst}" --subject "${sjt}" --multipart "multipart/encrypted; protocol=\"${enc}\"" --type "${enc}" --string "${pms}" --type application/octet-stream --file - --output|s-nail -t -s "${sjt}" -S from="${src}" ${dst}
@@ -1689,6 +1888,7 @@ if [ ! -f "/usr/bin/s-nail" ]; then
 	install
 fi
 command=$1
+subcommand=$2
 shift
 lastarg=${*: -1:1}
 if [ "$lastarg" == "tomail" ]; then
@@ -1700,6 +1900,9 @@ if [ "$lastarg" == "tosignal" ]; then
 	tosignal="1";
 fi
 case "$command" in
+mail)
+	mailapp $1 $2 $3
+      	;;
 ctcreate)
 	ctcreate $@
       	;;
@@ -1726,6 +1929,9 @@ disktemp)
       	;;
 diskhealth)
 	diskhealth
+      	;;
+running)
+	running
       	;;
 rapport)
 	rapport
@@ -1804,12 +2010,13 @@ upgrade)
 	;;
 esac
 ALLSTR=$(echo -en "$ALLSTR")
-if [ "$tosignal" == "1" ]; then
-	tosignal
-	show "Sended by signal at $signal_num" 1
+if [ "$ALLSTR" != "" ]; then
+	if [ "$tosignal" == "1" ]; then
+		tosignal
+		show "Sended by signal at $signal_num" 1
+	fi
+	if [ "$tomail" == "1" ]; then
+		tomail
+		show "Sended by mail at $dst" 1
+	fi
 fi
-if [ "$tomail" == "1" ]; then
-	tomail
-	show "Sended by mail at $dst" 1
-fi
-#show "$ALLSTR"

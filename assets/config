@@ -59,9 +59,8 @@ datapool="datapool/donnees"
 load=$(upsc eaton@localhost battery.charge > /dev/stdout 2> /dev/null)
 status=$(upsc eaton@localhost ups.status > /dev/stdout 2> /dev/null)
 
-## Mail configuration for rapportmail command
-src="horde.nicolas@orange.fr"
-dst="nico@ia86.cc"
+## Max disk temperature
+max_temp=40
 
 ## User Mapping :
 ## uid:gid  -> uid:gid from host
@@ -103,3 +102,13 @@ keep_daily="31"
 ##Configuration de signal
 signal_host="signal.mon.admin.lan"
 signal_num="+33611221911"
+
+##Configuration du mail
+smtp_server=smtp.bbox.fr
+smtp_port=25
+smtp_login="onlyforlogs@bbox.fr"
+## Mail configuration for rapportmail command
+mail_tag="SERVER"
+src="onlyforlogs@bbox.fr"
+src_name="PVE2"
+dst="nico@ia86.cc"
