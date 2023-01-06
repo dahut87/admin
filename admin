@@ -8,12 +8,19 @@ ALLARGS="$@"
 upgrade()
 {
 	show "Upgrade admin command" 1
-	wget --no-cache "https://raw.githubusercontent.com/dahut87/admin/master/admin" -O /tmp/admin &> /dev/null
+	wget --no-cache "https://git.ia86.cc/administrateur/lxcauto/raw/branch/master/admin" -O /tmp/admin &> /dev/null
 	if [ "$?" == 0 ]; then
 		show "Download ok"
 	else
 		show "Error on download" ERR
-		exit
+		show "Trying next repo..."
+		wget --no-cache "https://git.ia64.cc/administrateur/lxcauto/raw/branch/master/admin" -O /tmp/admin &> /dev/null
+		if [ "$?" == 0 ]; then
+			show "Download ok"
+		else
+			show "Error on download" ERR
+			exit
+		fi
 	fi
 	show "Compare version" 1
 	current=$(sha1sum /bin/admin|cut -d" " -f1)
